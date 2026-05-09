@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebRTC 视频传输实验</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4cc9f0',
+            secondary: '#7ae582',
+            dark: {
+              100: '#1e293b',
+              200: '#0f172a',
+              300: '#0b1a2e',
+              400: '#07111f',
+              500: '#02070d'
+            },
+            muted: '#8ea4c7',
+            accent: '#4cc9f0',
+            danger: '#f87171'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          },
+          boxShadow: {
+            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+            'inner-glow': 'inset 0 2px 8px rgba(0,0,0,0.35)'
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'float': 'float 6s ease-in-out infinite'
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .glass-effect {
+        @apply bg-opacity-40 backdrop-blur-md border border-opacity-20;
+      }
+      .gradient-bg {
+        background: linear-gradient(160deg, theme('colors.dark.400'), theme('colors.dark.300'));
+      }
+      .gradient-accent {
+        background: linear-gradient(135deg, rgba(76, 201, 240, 0.22), rgba(122, 229, 130, 0.18));
+      }
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      .card-hover {
+        @apply transition-all duration-300 hover:shadow-lg hover:border-primary hover:border-opacity-50;
+      }
+      .btn-primary {
+        @apply bg-gradient-to-r from-primary/20 to-secondary/20 text-white border border-primary/30 hover:border-primary/70 transition-all duration-300;
+      }
+      .btn-secondary {
+        @apply bg-dark-300 text-white border border-dark-100/30 hover:border-primary/50 transition-all duration-300;
+      }
+      .btn-disabled {
+        @apply opacity-50 cursor-not-allowed;
+      }
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen text-gray-100 font-sans">
+  <!-- Animated background elements -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-0 left-0 w-96 h-96 bg-primary/10 rounded-full filter blur-3xl animate-pulse-slow"></div>
+    <div class="absolute top-1/4 right-1/4 w-80 h-80 bg-secondary/10 rounded-full filter blur-3xl animate-pulse-slow" style="animation-delay: 1s;"></div>
+    <div class="absolute bottom-1/4 left-1/3 w-64 h-64 bg-primary/10 rounded-full filter blur-3xl animate-pulse-slow" style="animation-delay: 2s;"></div>
+  </div>
+
+  <div class="container mx-auto px-4 py-8 relative z-10">
+    <header class="mb-8">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div class="max-w-2xl">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+            <p class="text-primary uppercase tracking-widest text-sm font-medium">WebRTC 协议分析与视频传输</p>
+          </div>
+          <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 text-shadow bg-clip-text text-transparent bg-gradient-to-r from-white to-primary">
+            浏览器采集，Python 信令，端到端实时传输
+          </h1>
+          <p class="text-muted text-lg leading-relaxed">
+            选择发送端或观看端，加入同一房间后即可完成视频协商、ICE 连接与画面传输。
+          </p>
+        </div>
+        
+        <div class="bg-dark-300 glass-effect border border-gray-700 rounded-2xl p-6 w-full md:w-72 shadow-glass">
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <span class="text-muted">模式</span>
+              <strong class="text-primary flex items-center">
+                <i class="fa fa-exchange mr-2"></i>Sender / Viewer
+              </strong>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-muted">信令</span>
+              <strong class="text-primary flex items-center">
+                <i class="fa fa-plug mr-2"></i>WebSocket
+              </strong>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-muted">媒体</span>
+              <strong class="text-primary flex items-center">
+                <i class="fa fa-video-camera mr-2"></i>WebRTC
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Controls Panel -->
+      <section class="bg-dark-300 glass-effect border border-gray-700 rounded-2xl p-6 shadow-glass lg:col-span-1">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold flex items-center">
+            <i class="fa fa-sliders mr-3 text-primary"></i>连接配置
+          </h2>
+          <div class="bg-dark-400 rounded-full px-3 py-1 text-xs text-muted">
+            <span id="signalState">未连接</span>
+          </div>
+        </div>
+        
+        <div class="space-y-5">
+          <div>
+            <label class="block text-muted text-sm mb-2">房间号</label>
+            <input id="roomInput" value="demo" 
+                  class="w-full bg-dark-400 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" />
+          </div>
+          
+          <div>
+            <label class="block text-muted text-sm mb-2">角色</label>
+            <select id="roleSelect" 
+                    class="w-full bg-dark-400 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+              <option value="sender">发送端</option>
+              <option value="viewer">接收端</option>
+            </select>
+          </div>
+          
+          <div class="sender-only">
+            <label class="block text-muted text-sm mb-2">本地视频文件</label>
+            <input id="videoFileInput" type="file" accept="video/*" 
+                  class="w-full bg-dark-400 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" />
+          </div>
+          
+          <div class="grid grid-cols-1 gap-3 sender-only">
+            <button id="useVideoBtn" class="btn-primary rounded-xl px-4 py-3 font-medium disabled:btn-disabled" disabled>
+              <i class="fa fa-film mr-2"></i>使用所选视频
+            </button>
+            <button id="useCameraBtn" class="btn-secondary rounded-xl px-4 py-3 font-medium">
+              <i class="fa fa-video-camera mr-2"></i>恢复摄像头
+            </button>
+            <button id="switchCameraBtn" class="btn-secondary rounded-xl px-4 py-3 font-medium" style="display:none">
+              <i class="fa fa-refresh mr-2"></i>切换摄像头
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <button id="joinBtn" class="btn-primary rounded-xl px-4 py-3 font-medium">
+              <i class="fa fa-sign-in mr-2"></i>加入房间
+            </button>
+            <button id="leaveBtn" class="btn-secondary rounded-xl px-4 py-3 font-medium disabled:btn-disabled" disabled>
+              <i class="fa fa-sign-out mr-2"></i>断开连接
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3 sender-only">
+            <button id="startBtn" class="btn-primary rounded-xl px-4 py-3 font-medium disabled:btn-disabled" disabled>
+              <i class="fa fa-play mr-2"></i>开始推流
+            </button>
+            <button id="stopBtn" class="btn-secondary rounded-xl px-4 py-3 font-medium disabled:btn-disabled" disabled>
+              <i class="fa fa-stop mr-2"></i>停止推流
+            </button>
+          </div>
+          
+          <div class="border-t border-gray-700 pt-4 mt-6">
+            <h3 class="text-sm uppercase tracking-wider text-muted mb-3">状态信息</h3>
+            <div class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-muted">信令</span>
+                <strong id="signalStateDisplay" class="text-primary">未连接</strong>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted">PeerConnection</span>
+                <strong id="pcState" class="text-primary">未创建</strong>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted">ICE</span>
+                <strong id="iceState" class="text-primary">未开始</strong>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted">媒体源</span>
+                <strong id="sourceState" class="text-primary">摄像头</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Videos Panel -->
+      <section class="lg:col-span-2 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Local Video -->
+          <div class="bg-dark-300 glass-effect border border-gray-700 rounded-2xl p-6 shadow-glass card-hover">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+              <i class="fa fa-video-camera mr-2 text-primary"></i>本地画面
+            </h2>
+            <div class="relative">
+              <video id="localVideo" autoplay muted playsinline 
+                    class="w-full aspect-video bg-dark-500 rounded-xl border border-gray-700 object-cover shadow-inner-glow"></video>
+              <div class="absolute top-3 right-3 bg-dark-400/80 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-muted">
+                <span id="localResolution">--</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">帧率</div>
+                <div class="font-medium" id="localFps">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">码率</div>
+                <div class="font-medium" id="localBitrate">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">丢帧</div>
+                <div class="font-medium" id="localDropped">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">状态</div>
+                <div class="font-medium text-primary" id="localStatus">等待中</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Remote Video -->
+          <div class="bg-dark-300 glass-effect border border-gray-700 rounded-2xl p-6 shadow-glass card-hover">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+              <i class="fa fa-television mr-2 text-secondary"></i>远端画面
+            </h2>
+            <div class="relative">
+              <video id="remoteVideo" autoplay playsinline 
+                    class="w-full aspect-video bg-dark-500 rounded-xl border border-gray-700 object-cover shadow-inner-glow"></video>
+              <div class="absolute top-3 right-3 bg-dark-400/80 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-muted">
+                <span id="remoteResolution">--</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">帧率</div>
+                <div class="font-medium" id="remoteFps">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">码率</div>
+                <div class="font-medium" id="remoteBitrate">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">丢帧</div>
+                <div class="font-medium" id="remoteDropped">--</div>
+              </div>
+              <div class="bg-dark-400 rounded-xl p-3">
+                <div class="text-xs text-muted mb-1">状态</div>
+                <div class="font-medium text-secondary" id="remoteStatus">等待中</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Logs Panel -->
+        <div class="bg-dark-300 glass-effect border border-gray-700 rounded-2xl p-6 shadow-glass">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold flex items-center">
+              <i class="fa fa-terminal mr-2 text-primary"></i>运行日志
+            </h2>
+            <button id="clearLogsBtn" class="text-xs text-muted hover:text-primary transition-colors">
+              <i class="fa fa-trash-o mr-1"></i>清空
+            </button>
+          </div>
+          <div class="relative">
+            <pre id="logBox" class="bg-dark-500 rounded-xl p-4 h-48 overflow-y-auto text-sm font-mono text-gray-300"></pre>
+            <div class="absolute bottom-3 right-3 bg-dark-400/80 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-muted" id="logCount">
+              0 条日志
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    
+    <footer class="mt-12 text-center text-muted text-sm">
+      <p>WebRTC 视频传输实验 &copy; 2024 | 基于现代 Web 技术构建</p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

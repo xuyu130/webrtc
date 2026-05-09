@@ -1,0 +1,11 @@
+version: '3.7'
+services:
+  coturn:
+    image: instrumentisto/coturn
+    container_name: coturn
+    # Use host networking so coturn's dynamic relay ports are reachable from outside the host.
+    # Note: host networking only works on Linux hosts.
+    network_mode: "host"
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
+    restart: unless-stopped
