@@ -66,13 +66,14 @@ const videoMetricState = {
 // ICE servers 列表：包含公共 STUN + 本地 TURN
 let iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
+  
     {
       // 尝试本机/局域网与公网地址作为备用（按需使用 URL 参数覆盖）
       urls: [
         "turn:172.24.155.240:3478?transport=udp",
         "turn:172.24.155.240:3478?transport=tcp",
-        "turn:202.113.185.176:3478?transport=udp",
-        "turn:202.113.185.176:3478?transport=tcp"
+        "turn:202.113.184.66:3478?transport=udp",
+        "turn:202.113.184.66:3478?transport=tcp"
       ],
       username: "turnuser",
       credential: "turnpassword"
@@ -210,6 +211,10 @@ function parseIceCandidate(candidateString) {
     port: parts[5] || "",
     type: parts[typeIndex + 1] || "",
   };
+}
+
+function isIpv6Address(address) {
+  return typeof address === "string" && address.includes(":");
 }
 
 function getVideoFrameCount(video) {
@@ -476,7 +481,8 @@ function isMobile() {
 
 async function getPreferredVideoConstraints() {
   // Try to select by deviceId (preferred) else use facingMode
-  const base = { audio: false };
+  // enable audio (麦克风) by default
+  const base = { audio: true };
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoInputs = devices.filter((d) => d.kind === "videoinput");
@@ -534,6 +540,7 @@ function createPeerConnection() {
   peerConnection =  new RTCPeerConnection({
     iceServers: iceServers,
     // iceTransportPolicy: "relay" // 🔥 强制只走 TURN，用于测试各个协议是否生效
+    
   });
   setPcState("已创建");
 
@@ -581,7 +588,11 @@ function createPeerConnection() {
           log(`STUN 映射成功！公网地址及端口: ${mapped}`, 'success');
         }
       } else if (parsed?.type === 'host') {
-        log(`局域网/本机本地地址: ${parsed.address}:${parsed.port}`, 'info');
+        if (isIpv6Address(parsed.address)) {
+          log(`IPv6 直连候选: ${parsed.address}:${parsed.port}`, 'success');
+        } else {
+          log(`局域网/本机本地地址: ${parsed.address}:${parsed.port}`, 'info');
+        }
       }
 
       if (socket?.readyState === WebSocket.OPEN) {

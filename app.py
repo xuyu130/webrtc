@@ -65,12 +65,12 @@ def log_candidate_payload(room_id: str, role: str, payload: dict) -> None:
     if candidate_type == "srflx":
         print(f"[STUN][room={room_id}][role={role}] mapped public address: {address}:{port}")
     elif candidate_type == "host":
-        print(f"[ICE][room={room_id}][role={role}] local candidate: {address}:{port}")
+        print(f"[HOST][room={room_id}][role={role}] local candidate: {address}:{port}")
     elif candidate_type == "relay":
         # relay 表示 TURN 中继候选
         print(f"[TURN][room={room_id}][role={role}] relay candidate (TURN): {address}:{port}")
     else:
-        print(f"[ICE][room={room_id}][role={role}] candidate type={candidate_type} {address}:{port}")
+        print(f"[HOST][room={room_id}][role={role}] candidate type={candidate_type} {address}:{port}")
 
 
 async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
